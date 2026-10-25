@@ -45,9 +45,10 @@ class AudioEngine(private val context: Context) : AutoCloseable {
             running.set(false); callbacks.onError("El audio está ocupado por otra aplicación."); return
         }
         manager.mode = AudioManager.MODE_IN_COMMUNICATION
-        val externalTypes = setOf(AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+        val externalTypes = mutableSetOf(AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
             AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_USB_HEADSET,
-            AudioDeviceInfo.TYPE_HEARING_AID, AudioDeviceInfo.TYPE_BLE_HEADSET)
+            AudioDeviceInfo.TYPE_HEARING_AID)
+        if (android.os.Build.VERSION.SDK_INT >= 31) { externalTypes.add(AudioDeviceInfo.TYPE_BLE_HEADSET); externalTypes.add(AudioDeviceInfo.TYPE_BLE_SPEAKER) }
         if (manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).none { it.type in externalTypes }) {
             if (android.os.Build.VERSION.SDK_INT >= 31) {
                 manager.availableCommunicationDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }

@@ -1,23 +1,55 @@
 {
-  "apk": "JARVIS-Android-0.1.0.apk",
-  "bytes": 129753378,
-  "sha256": "3666da812863c47878bfdd748c94f8d45a017ff6b675a76d214219140ae27be7",
+  "version": "0.2.0",
+  "date": "2026-10-25",
+  "apk": "JARVIS-Android-0.2.0.apk",
+  "bytes": 130003389,
+  "sha256": "24737dcc650c1f0aef01c2c094307d0939eef88df3932251930618d3f9f4877e",
   "tests": [
     {
+      "name": "dev.jarvis.android.ActionArgumentsTest",
+      "tests": "8",
+      "errors": "0",
+      "failures": "0"
+    },
+    {
+      "name": "dev.jarvis.android.AndroidActionsTest",
+      "tests": "20",
+      "errors": "0",
+      "failures": "0"
+    },
+    {
+      "name": "dev.jarvis.android.ConversationServiceTest",
+      "tests": "6",
+      "errors": "0",
+      "failures": "0"
+    },
+    {
       "name": "dev.jarvis.android.GeminiLiveClientTest",
-      "tests": "4",
+      "tests": "6",
       "errors": "0",
       "failures": "0"
     },
     {
       "name": "dev.jarvis.android.LiveProtocolTest",
-      "tests": "5",
+      "tests": "6",
       "errors": "0",
       "failures": "0"
     },
     {
       "name": "dev.jarvis.android.LocalAppTest",
       "tests": "8",
+      "errors": "0",
+      "failures": "0"
+    },
+    {
+      "name": "dev.jarvis.android.ScreenAccessServiceTest",
+      "tests": "22",
+      "errors": "0",
+      "failures": "0"
+    },
+    {
+      "name": "dev.jarvis.android.ScreenPolicyTest",
+      "tests": "5",
       "errors": "0",
       "failures": "0"
     },
@@ -54,5 +86,13 @@
       16384,
       16384
     ]
-  }
+  },
+  "totalTests": 89,
+  "lintErrors": 0,
+  "lintWarnings": [
+    "SetTextI18n"
+  ],
+  "signatureVerified": true,
+  "sameSigningCertificateAs010": true,
+  "deviceTested": false
 }

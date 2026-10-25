@@ -1,65 +1,72 @@
 # JARVIS para Android
 
-Primera versión nativa **0.1.0**, para **Android 10 o superior**. Proyecto independiente de [JARVIS PC](https://github.com/luisfabricio7771/jarvis-pc): no depende del programa de Windows ni modifica sus archivos.
+Versión **0.2.0 — Control del teléfono**, para **Android 10 o superior**. Proyecto independiente de [JARVIS PC](https://github.com/luisfabricio7771/jarvis-pc); sus archivos no se modifican.
 
-## Instalar la primera APK
+## Instalar y habilitar
 
-En esta entrega el archivo local es `artifacts/JARVIS-Android-0.1.0.apk` (aproximadamente 124 MiB). El APK no se guarda como archivo de código en Git; las instrucciones de compilación permiten reconstruirlo.
+1. Instala `artifacts/JARVIS-Android-0.2.0.apk` sobre la versión anterior, sin desinstalarla. Se conservan clave, preferencias e historial cuando la firma coincide.
+2. En **Ajustes**, configura la clave Gemini si aún no existe.
+3. Abre **Control del teléfono** y activa **Permitir acciones por voz**.
+4. Para interactuar dentro de apps, activa **Permitir control de pantalla**, elige **Apps autorizadas** y habilita el servicio **Control de pantalla de JARVIS** desde accesibilidad de Android.
+5. Si quieres que Gemini encuentre los controles, activa **Compartir etiquetas visibles con Gemini** y revisa la explicación. Puede incluir nombres u otros datos visibles de las apps seleccionadas. No se comparten capturas, contraseñas ni el texto actual de los campos editables.
+6. Deja **Revisar cada toque y desplazamiento** activo para las primeras pruebas. La escritura siempre exige revisar el texto.
+7. Regresa a JARVIS, inicia la escucha y concede los permisos solicitados. Di **JARVIS**, espera el saludo y pide la acción.
 
-1. Copia el APK a tu teléfono por USB o tu método habitual de transferencia.
-2. Ábrelo desde Archivos y permite la instalación desde esa aplicación si Android lo solicita.
-3. Abre **JARVIS → Ajustes** y pega tu clave de Google AI Studio. Pulsa **Guardar**.
-4. Pulsa **Activar escucha**, concede el permiso de micrófono y vuelve a pulsar el botón si aparece «Micrófono autorizado».
-5. Di **JARVIS**, espera el saludo y conversa. Puedes intervenir por voz durante las respuestas.
-6. **Detener** cierra la conversación y apaga el micrófono. **Conversar ahora** permite probar el audio sin la palabra de activación.
+Con control por voz habilitado, la conversación continúa al cambiar de app. La notificación permite volver a JARVIS o **Detener**. Bloquear la pantalla o cerrar la tarea detienen la escucha; no vuelve a arrancar por sí sola. Sin control por voz se conserva la pausa al salir de la app.
 
-Esta APK está firmada para pruebas locales, no es una publicación de Play Store. Conserva la firma local si quieres instalar futuras actualizaciones sobre esta misma app sin reinstalarla. No subas claves de firma al repositorio.
+Android puede imponer restricciones adicionales a accesibilidad y a abrir apps desde segundo plano. Se habilitan desde el teléfono; JARVIS no concede sus propios permisos ni sortea restricciones del sistema.
 
-## Funciones de esta versión
+## Acciones implementadas
 
-- Gemini **3.8 Live** por WebSocket oficial: audio de entrada a 16 kHz y voz de salida a 24 kHz.
-- Voz predeterminada del modelo, sin seleccionar una voz diferente.
-- Activación local por «JARVIS» con Vosk en español, disponible desde Android 10. El modelo viene incluido en la APK; al primer uso se prepara en el almacenamiento interno.
-- Frases competidoras para reducir confusiones con «ya vi», «ya ves», «llaves» y otras palabras parecidas. La detección exige un resultado final con confianza y duración suficientes.
-- Filtro neuronal Silero para atenuar ruido antes de enviarlo a Gemini; cancelación de eco y reducción de ruido del teléfono cuando su hardware las ofrece.
-- Conversación simultánea con interrupciones de voz, sin botón especial de interrupción.
-- Historial de transcripciones en SQLite, limitado a 500 mensajes. No guarda grabaciones de audio ni envía el historial anterior automáticamente al modelo.
-- Clave cifrada mediante AES-GCM y Android Keystore; la pantalla de configuración impide capturas. Copias de seguridad automáticas y transferencia de estos datos desactivadas.
-- Colores cian, azul y ámbar. Ajustes y conversaciones persisten entre aperturas.
-- La sesión se detiene al salir de la app o bloquear el teléfono. Tras 60 segundos sin actividad vuelve a esperar JARVIS si la activación está habilitada.
+- Abrir apps instaladas por nombre; devolver coincidencias si el nombre es ambiguo.
+- Abrir Wi-Fi, Bluetooth, sonido, pantalla, batería y otros ajustes.
+- Ajustar volumen multimedia o de la voz de JARVIS.
+- Preparar alarmas y temporizadores en la app de reloj, sin ocultar su interfaz.
+- Preparar marcador y borradores SMS, con revisión de número/contenido. El usuario pulsa la acción final en la app correspondiente.
+- Abrir mapas y direcciones HTTPS.
+- Consultar hora/zona horaria, batería y volumen del teléfono.
+- Leer bajo petición etiquetas de controles de apps autorizadas; tocar, escribir, desplazar listas, volver atrás, ir al inicio y abrir recientes.
 
-## Alcance y limitaciones comprobadas
+El control de pantalla usa nodos de accesibilidad, no coordenadas arbitrarias ni capturas. Los identificadores caducan y se invalidan al cambiar la pantalla o después de actuar. Se verifica otra vez el control antes de ejecutar. Si una app no expone controles accesibles o no acepta la acción, se informa y requiere uso manual.
 
-La compilación, firma y pruebas automáticas pasaron. **La conversación completa con Gemini, el micrófono, altavoz, Bluetooth, Keystore físico y batería requieren prueba en un teléfono real.** Las pruebas de arranque Android 10/15 son de Robolectric, no pruebas de hardware ni de emulador.
+Hay etiquetas y controles finales que se dejan expresamente para intervención manual, por ejemplo enviar, pagar, confirmar, eliminar, instalar o permitir acceso. No se automatizan contraseñas ni permisos del sistema. El resultado «acción solicitada/aceptada» no prueba que una app haya completado un envío, compra o guardado: el modelo debe comprobar la nueva pantalla y reconocer límites.
 
-El filtro reduce activaciones por ruido; no puede garantizar cero falsos positivos y puede reconocer voces de televisión o de otras personas. La precisión debe ajustarse con tu pronunciación y entorno.
+## Ejemplos para probar
 
-Gemini requiere Internet, una clave con acceso al modelo y cuota disponible. La app no garantiza que el servicio sea gratuito. Si la cuenta rechaza el modelo o no tiene cuota, se muestra un error; no cambia silenciosamente a otro modelo.
+- «Abre YouTube».
+- «Toca Buscar» (con YouTube autorizado, accesibilidad y etiquetas activas).
+- «Escribe música relajante» y revisa el texto antes de continuar.
+- «Baja un poco» o «Vuelve atrás».
+- «Pon el volumen multimedia al cincuenta por ciento».
+- «Prepara un temporizador de cinco minutos».
+- «Abre los ajustes de Wi-Fi».
 
-La escucha con pantalla bloqueada, servicio en segundo plano, memoria inteligente, herramientas del teléfono, control de Windows y sincronización entre dispositivos quedan pendientes. El historial local es un registro: no es memoria compartida con la versión de PC.
+La pantalla **Control del teléfono** también ofrece pruebas locales de apps, reloj, ajustes y estado **sin usar Gemini ni una clave API**.
 
-## Compilar desde este repositorio
+## Voz, configuración y memoria local
 
-Requisitos: JDK 17 y Android SDK con plataforma 35, Build Tools 35.0.0 y Platform Tools. Android Studio puede preparar estos componentes; acepta las licencias desde sus herramientas oficiales. Configura `JAVA_HOME` y `local.properties` con `sdk.dir` para tu SDK.
+Gemini **3.8 Live**, con su voz predeterminada, conversación simultánea e interrupción por voz. Activación local Vosk en español y filtro Silero incluidos en la APK. Gemini necesita Internet, acceso al modelo y cuota; la app no garantiza uso gratuito.
+
+La clave se cifra con AES-GCM y Android Keystore. Historial SQLite limitado a 500 mensajes, sin grabaciones de audio; no se envía automáticamente al modelo. Tres colores: cian, azul y ámbar. No existe todavía sincronización con PC ni memoria inteligente compartida.
+
+Los permisos de control y accesibilidad están desactivados por defecto. La selección de apps y el consentimiento para compartir etiquetas son separados. Los eventos de accesibilidad solo invalidan identificadores locales; no se guardan ni transmiten como un registro continuo.
+
+## Compilar
+
+JDK 17, Android SDK 35, Build Tools 35.0.0 y Platform Tools. Configura `JAVA_HOME` y `local.properties` con `sdk.dir`.
 
 ```powershell
 .\build.ps1
 ```
 
-El script ejecuta `testDebugUnitTest`, `lintDebug` y `assembleDebug`, y copia el APK a `artifacts/`. También puedes ejecutar `./gradlew testDebugUnitTest lintDebug assembleDebug` en macOS/Linux.
+Ejecuta pruebas, Android Lint y `assembleDebug`, y deja el APK en `artifacts/`. Para evitar bloqueos de OneDrive, `build.ps1` coloca archivos generados, cachés y caché de proyecto en una carpeta temporal propia; su ruta aparece en `.tools/build-root.txt`. El código permanece en el repositorio. Los informes están en `app/reports/` dentro de esa carpeta de compilación.
 
-Gradle 8.11.1 se comprueba mediante SHA-256. Antes de compilar se descargan dos modelos oficiales con SHA-256 fijo y se incluyen en la APK. No hay descarga de modelos ni Python dentro del teléfono. `build.ps1 -TestOnly` ejecuta pruebas y análisis.
+En macOS/Linux o Android Studio se puede usar `./gradlew testDebugUnitTest lintDebug assembleDebug` con la salida habitual en `app/build/`. Gradle y los modelos se descargan de fuentes oficiales con SHA-256 fijo. La APK es de desarrollo; SDK, cachés, modelos descargados, claves y APK no se suben como código a Git.
 
-No se incluyen SDK, JDK, cachés, modelos descargados, claves ni APK en Git. Los APK se generan con la firma de desarrollo de la máquina. Para distribución estable se necesita una firma de lanzamiento respaldada por separado.
+## Validación y límites
 
-## Validación y arquitectura
+Ver [docs/PROGRESS.md](docs/PROGRESS.md), [docs/TESTING.md](docs/TESTING.md), [docs/INSTALL.md](docs/INSTALL.md) y [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Consulta [docs/PROGRESS.md](docs/PROGRESS.md), [docs/TESTING.md](docs/TESTING.md) y [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Las pruebas de interfaces y accesibilidad usan ventanas Android simuladas por Robolectric en API 29 y 35. **Falta validar instalación, Gemini real, micrófono, servicio entre apps, accesibilidad, Bluetooth y batería en un teléfono físico.** No se afirma compatibilidad con todas las interfaces de terceros.
 
-- `live/`: protocolo y conexión Gemini. No envía audio hasta recibir `setupComplete`.
-- `audio/`: captura y reproducción independientes; filtro de voz y vaciado de audio al intervenir.
-- `wake/`: reconocimiento local sin conexión a Gemini mientras espera la palabra.
-- `data/`: configuración protegida e historial local.
-- `MainActivity`: interfaz y ciclo de vida. No arranca el micrófono por sí sola al abrir la app.
-
-Fuentes oficiales: [Gemini Live WebSocket](https://ai.google.dev/gemini-api/docs/live-api/get-started-websocket), [referencia Live](https://ai.google.dev/api/live), [Vosk](https://alphacephei.com/vosk/models), [Silero VAD](https://github.com/snakers4/silero-vad/tree/v5.1).
+Fuentes: [Gemini Live](https://ai.google.dev/gemini-api/docs/live-api/tools), [intents Android](https://developer.android.com/guide/components/intents-common), [servicios visibles](https://developer.android.com/develop/background-work/services/fgs/service-types), [accesibilidad Android](https://developer.android.com/guide/topics/ui/accessibility/service).

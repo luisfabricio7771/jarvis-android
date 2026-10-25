@@ -1,44 +1,39 @@
-# Validación de JARVIS Android 0.1.0
+# Validación de JARVIS Android 0.2.0
 
-Fecha de entrega: 24 de octubre de 2026 (America/Mexico_City).
+Entrega: 25 de octubre de 2026, America/Mexico_City.
 
 ## Automatizada
 
-`build.ps1` ejecuta 25 pruebas JUnit y Robolectric, Android Lint y compilación del APK. El detalle de pruebas se encuentra en `app/build/reports/tests/testDebugUnitTest/`; el análisis en `app/build/reports/lint-results-debug.html`. Son archivos locales regenerables.
+`build.ps1` ejecuta pruebas JUnit/Robolectric, Android Lint y compilación. La carpeta temporal seleccionada por el script aparece en `.tools/build-root.txt`; dentro de `app/reports/` están los informes. La salida se aisló de OneDrive después de detectar bloqueos de sus archivos generados.
 
-Cobertura funcional comprobada:
+Se comprobaron:
 
-- Configuración de Gemini 3.8 Live sin imponer voz ni parámetros incompatibles.
-- PCM de 16 bits, frecuencia declarada, ida y vuelta sin alterar los bytes.
-- Conexión con WebSocket de prueba real (MockWebServer), saludo/configuración, confirmación de sesión, audio, transcripción, fin de turno e interrupción.
-- Audio bloqueado antes de `setupComplete`, después de error y al cerrar.
-- Errores del proveedor sin reenviar mensajes que pudieran contener la clave; respuesta inválida y aviso `goAway`.
-- Filtro temporal: ruido, clic aislado, voz sostenida, preámbulo de audio, cierre tras silencio y falsos positivos casi inaudibles.
-- Palabra completa de activación, sin activar por subcadenas.
-- SQLite persistente al cerrar y reabrir, borrado, validación de roles y preferencias persistentes.
-- Arranque y cierre sin activar micrófono o conectarse automáticamente, tanto con API 29 como API 35 simuladas por Robolectric.
+- Gemini 3.8 Live con voz predeterminada, parámetros compatibles y herramientas habilitadas solo con consentimiento de control.
+- WebSocket real contra MockWebServer: confirmación, PCM, transcripciones, interrupción, cierre correcto del servidor de prueba, resultados correlacionados por ID, rechazo de duplicados y cancelaciones.
+- Validación estricta: parámetros permitidos, enteros acotados, números sin USSD/extensiones, HTTPS sin credenciales, nombre de app exacto o ambiguo.
+- Intents Android de marcador, SMS, reloj, mapas y navegador; ninguna llamada/SMS se envía directamente. Interfaces del reloj visibles.
+- Cola de revisión acotada, ordenada, cancelable y con caducidad. Una acción cancelada o expirada no puede aprobarse.
+- Servicio de conversación sin autoarranque de audio al enlazar, sin reinicio persistente, parada al apagar pantalla y panel local sin clave/micrófono.
+- Accesibilidad en ventanas simuladas: selección de apps, consentimiento independiente para etiquetas, exclusión de contraseñas, contenido actual de campos y texto no interactivo; toque por identificador exacto; controles finales manuales; rechazo por cambio de posición; invalidación tras desplazamiento manual; desplazamiento nativo; escritura detenida hasta revisión y operación nativa con el texto revisado.
+- Identificadores por app con vencimiento; limpieza al detener o reemplazar contexto; permiso de enlace de accesibilidad reservado al sistema.
+- Persistencia SQLite/preferencias, roles válidos, borrado y arranque/cierre en API 29 y 35 simuladas.
+- Filtro de voz: ruido, clic aislado, voz sostenida, preámbulo, cierre por silencio y falso positivo casi inaudible.
 
-El APK se comprobó con `apksigner verify`, `aapt dump badging` y `zipalign -c -P 16 4`. Además se verificaron los segmentos ELF de las cuatro bibliotecas arm64: todos admiten alineación de 16 KiB. `docs/build-verification.json` registra pruebas, tamaño, SHA-256 y alineación. Esta verificación no sustituye probar la instalación.
+`docs/build-verification.json` registra el APK, SHA-256, tamaño, resultados y alineación. Se verifica con `apksigner`, `aapt` y `zipalign`. Las bibliotecas arm64 se revisan para segmentos ELF de 16 KiB. La firma se compara con la de 0.1.0 para permitir actualización local.
 
-## Modelos reales, audio sintético
+## Modelos de voz
 
-Se ejecutaron Vosk de escritorio 0.3.45 y ONNX Runtime 1.22.0 con los mismos modelos incluidos en la APK. La biblioteca Android de Vosk es 0.3.75; el micrófono de Android no participó en estas pruebas.
+Se conserva la validación de 0.1.0 con los mismos modelos: Vosk de escritorio 0.3.45, ONNX Runtime 1.22.0 y voz sintética Microsoft Sabina Desktop. Tres formas de JARVIS activaron; ocho frases sin la palabra, silencio y clics no activaron. Silero detectó voz en 19 cuadros y cero cuadros sobre el umbral para silencio, ruido blanco y clics. Informes en `wake-validation.json` y `silero-validation.json`. No son grabaciones personales ni pruebas de micrófono Android.
 
-Voz generada por Windows SpeechSynthesizer, Microsoft Sabina Desktop: «Jarvis», «Hola Jarvis» y «Oye Jarvis» activaron. Ocho frases sin la palabra, silencio y clics simulados no activaron. La primera gramática confundía «ya vi»/«ya ves» y se corrigió antes de la entrega.
+## Pendiente en teléfono físico
 
-Silero marcó 19 cuadros de voz en «Jarvis» y cero cuadros sobre el umbral en silencio, ruido blanco y clics. Ver `docs/wake-validation.json` y `docs/silero-validation.json`. No se usaron grabaciones personales ni una clave real de Gemini.
+1. Actualizar sin perder clave/historial y comprobar Android 10+.
+2. Conceder micrófono y notificaciones; probar apertura de apps sin cortar la voz, detener desde notificación y bloqueo de pantalla.
+3. Habilitar accesibilidad manualmente, autorizar una app y revisar consentimiento de etiquetas.
+4. Comprobar botones, listas y escritura en esa app; cancelar una revisión y comprobar que no se ejecuta.
+5. Cambiar de pantalla durante una revisión: debe rechazar controles antiguos. Revocar acceso a una app o a etiquetas y comprobar el rechazo.
+6. Verificar que contraseñas/campos sensibles no se exponen y que controles finales requieren intervención manual.
+7. Probar ajustes, volumen, reloj, marcador y SMS en las apps instaladas del teléfono.
+8. Probar conexión real de Gemini, cuota, Internet, auriculares/Bluetooth, ruido, pronunciación, temperatura y batería.
 
-Para repetir en Windows con voz Sabina disponible, crea un entorno Python separado, instala `tools/voice-test-requirements.txt` y ejecuta `tools/Test-SyntheticVoice.ps1 -Python <ruta-al-python-del-entorno>`. Los audios sintéticos quedan en `.tools/` y no se suben a Git.
-
-## En teléfono: pendiente
-
-1. Instalar en Android 10 o superior y abrir sin otorgar permiso: no debe escuchar.
-2. Guardar la clave desde Ajustes, cerrar/abrir y comprobar que sigue disponible sin mostrarla en pantalla.
-3. Conceder micrófono, activar espera y probar JARVIS, frases parecidas, teclado, golpes y silencio.
-4. Esperar el saludo, conversar e intervenir mientras responde. Comprobar altavoz y, por separado, audífonos/Bluetooth.
-5. Probar Internet desconectado, clave inválida y cuota agotada: debe cerrar la sesión y mostrar un error sin clave.
-6. Salir o bloquear el teléfono: comprobar que desaparece el indicador de micrófono después de liberar el recurso.
-7. Comprobar retorno a espera tras inactividad, conservación del historial y borrado.
-8. Evaluar pronunciación, ruido, temperatura, memoria y batería. Ajustar sensibilidad según resultados reales.
-
-No se afirma validación de hardware ni conversación remota exitosa hasta completar esta lista en un teléfono.
+No hay teléfono conectado: esta entrega no afirma validación de hardware ni de todas las apps de terceros. Algunos pasos requieren interacción manual, y Android/fabricante pueden restringir apertura de apps o accesibilidad.

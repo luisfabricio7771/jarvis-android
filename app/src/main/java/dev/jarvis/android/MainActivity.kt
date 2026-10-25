@@ -3,37 +3,32 @@ package dev.jarvis.android
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.*
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
+import android.os.*
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.*
-import dev.jarvis.android.audio.AudioEngine
 import dev.jarvis.android.data.HistoryStore
 import dev.jarvis.android.data.SecureSettings
-import dev.jarvis.android.live.GeminiLiveClient
 import dev.jarvis.android.ui.OrbView
-import dev.jarvis.android.wake.WakeDetector
+import dev.jarvis.android.session.ConversationService
+import dev.jarvis.android.session.SessionController
 
-class MainActivity : Activity() {
-    private enum class Phase { OFF, PREPARING, WAKE, CONNECTING, LIVE }
-    private var phase = Phase.OFF
-    @Volatile private var session = 0
-    private var visible = false
-    @Volatile private var lastActivityAt = 0L
-    private val main = Handler(Looper.getMainLooper())
+class MainActivity: Activity() {
     private lateinit var settings: SecureSettings
     private lateinit var history: HistoryStore
-    private lateinit var wake: WakeDetector
-    private var audio: AudioEngine? = null
-    private var live: GeminiLiveClient? = null
+    private var sessionController: SessionController?=null
+    private var binding=false
+    private var visible=false
+    private var lastChatVersion=-1
+    private var actionDialog: AlertDialog?=null
+    private var dialogId: String?=null
     private lateinit var title: TextView
     private lateinit var status: TextView
     private lateinit var detail: TextView
@@ -43,36 +38,38 @@ class MainActivity : Activity() {
     private lateinit var manual: Button
     private lateinit var transcript: LinearLayout
     private lateinit var chatScroll: ScrollView
-    private val pending = linkedMapOf<String, StringBuilder>()
-    private val bubbles = mutableMapOf<String, TextView>()
-    private val bg = Color.rgb(10, 16, 24)
-    private val panel = Color.rgb(17, 27, 39)
-    private val muted = Color.rgb(146, 163, 180)
-    private val light = Color.rgb(235, 242, 248)
-    private var accent = Color.rgb(101, 220, 212)
-    private val timeout = Runnable {
-        if (phase == Phase.CONNECTING) stopAll("La conexión tardó demasiado. Revisa Internet y vuelve a intentar.")
-    }
-    private val idle = object : Runnable {
-        override fun run() {
-            if (phase != Phase.LIVE) return
-            if (audio?.isPlaying() == true) lastActivityAt = System.currentTimeMillis()
-            if (System.currentTimeMillis() - lastActivityAt > 60_000) {
-                stopAll()
-                if (settings.wakeEnabled && visible) armWake() else setStatus("En pausa", "La conversación terminó por inactividad.")
-            } else main.postDelayed(this, 1000)
+    private val bg=Color.rgb(10,16,24)
+    private val panel=Color.rgb(17,27,39)
+    private val muted=Color.rgb(146,163,180)
+    private val light=Color.rgb(235,242,248)
+    private var accent=Color.rgb(101,220,212)
+    private val observer: (SessionController.State)->Unit = {renderState(it)}
+    private val connection=object: ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?,binder: IBinder?) {
+            if(!visible) return
+            val local=binder as? ConversationService.LocalBinder ?: return
+            sessionController=local.controller
+            sessionController?.observe(observer);sessionController?.attachHost(this@MainActivity)
         }
+        override fun onServiceDisconnected(name: ComponentName?) { sessionController=null;renderState(null) }
     }
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        settings = SecureSettings(this); history = HistoryStore(this); wake = WakeDetector(applicationContext)
-        buildUi()
+    override fun onCreate(savedInstanceState: Bundle?) {super.onCreate(savedInstanceState);settings=SecureSettings(this);history=HistoryStore(this);buildUi()}
+    override fun onStart() {
+        super.onStart();visible=true
+        binding=bindService(Intent(this,ConversationService::class.java),connection,Context.BIND_AUTO_CREATE)
     }
-    override fun onStart() { super.onStart(); visible = true }
-    override fun onStop() { visible = false; stopAll(); super.onStop() }
-    override fun onDestroy() { main.removeCallbacksAndMessages(null); wake.close(); history.close(); super.onDestroy() }
-
+    override fun onNewIntent(intent: Intent) {super.onNewIntent(intent);sessionController?.attachHost(this)}
+    override fun onStop() {
+        visible=false;actionDialog?.dismiss();actionDialog=null;dialogId=null
+        sessionController?.removeObserver(observer);sessionController?.detachHost(this)
+        if(!settings.phoneControlEnabled) sessionController?.stop()
+        if(binding) {unbindService(connection);binding=false}
+        sessionController=null;window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        super.onStop()
+    }
+    override fun onDestroy() {history.close();super.onDestroy()}
     private fun buildUi() {
+        lastChatVersion=-1
         accent = when(settings.accent) { "blue" -> Color.rgb(130, 176, 255); "amber" -> Color.rgb(239, 191, 109); else -> Color.rgb(101, 220, 212) }
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg); setPadding(dp(22), dp(12), dp(22), dp(12)) }
         root.setOnApplyWindowInsetsListener { view, insets ->
@@ -87,6 +84,7 @@ class MainActivity : Activity() {
         header.addView(brand, LinearLayout.LayoutParams(0, dp(56), 1f))
         header.addView(button("Ajustes", false).apply { contentDescription = "Abrir ajustes"; setOnClickListener { openSettings() } }, LinearLayout.LayoutParams(dp(98), dp(48)))
         root.addView(header)
+        root.addView(button("Control del teléfono", false).apply { setOnClickListener { startActivity(android.content.Intent(this@MainActivity, dev.jarvis.android.actions.ControlActivity::class.java)) } }, LinearLayout.LayoutParams(-1,dp(42)).apply { topMargin=dp(8) })
         badge = text("GEMINI LIVE · VOZ PREDETERMINADA", 10f, accent).apply { letterSpacing = .06f; gravity = Gravity.CENTER; setPadding(0,dp(18),0,0) }
         root.addView(badge)
         orb = OrbView(this).apply { contentDescription = "Estado visual de JARVIS"; this.accent = this@MainActivity.accent }
@@ -108,117 +106,70 @@ class MainActivity : Activity() {
         root.addView(primary, LinearLayout.LayoutParams(-1, dp(54)))
         manual = button("Conversar ahora", false).apply { setOnClickListener { startRequested(false) } }
         root.addView(manual, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(6) })
-        root.addView(text("Android 10+  ·  La escucha se pausa al salir de la app", 10f, muted).apply { gravity = Gravity.CENTER; setPadding(0,dp(8),0,0) })
+        root.addView(text("Android 10+  ·  Control opcional · Detener desde la notificación", 10f, muted).apply { gravity = Gravity.CENTER; setPadding(0,dp(8),0,0) })
         setContentView(root)
         if (settings.hasKey()) detail.text = "Activa la escucha y di «JARVIS», o pulsa Conversar ahora."
-        updateButtons()
+        renderState(sessionController?.state())
     }
+
     private fun primaryAction() {
-        if (phase != Phase.OFF) stopAll() else startRequested(settings.wakeEnabled)
+        if(sessionController?.isActive()==true) stopAll() else startRequested(settings.wakeEnabled)
     }
-    private var requestedWake = true
     private fun startRequested(useWake: Boolean) {
-        if (phase != Phase.OFF) stopAll()
-        if (!settings.hasKey()) { openSettings(); return }
-        requestedWake = useWake
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 7); return
+        if(!settings.hasKey()) {openSettings();return}
+        if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO),7);return
         }
-        if (useWake) armWake() else connectLive()
-    }
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 7) {
-            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
-                // Permission dialogs can briefly pause this Activity. A fresh button press is safe on every Android version.
-                setStatus("Micrófono autorizado", "Pulsa Activar escucha o Conversar ahora para comenzar.")
-            } else setStatus("Micrófono sin permiso", "Permite el micrófono desde los ajustes de Android para conversar.")
+        val prefs=getSharedPreferences("jarvis_settings",MODE_PRIVATE)
+        if(Build.VERSION.SDK_INT>=33 && settings.phoneControlEnabled && !prefs.getBoolean("notification_prompted",false) &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) {
+            prefs.edit().putBoolean("notification_prompted",true).apply()
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS),8);return
         }
+        try {startForegroundService(Intent(this,ConversationService::class.java).setAction(ConversationService.START).putExtra("wake",useWake))}
+        catch(_:Exception) {setStatus("No se pudo iniciar","Android no permitió comenzar. Mantén JARVIS abierta y vuelve a intentar.")}
     }
-    private fun armWake() {
-        if (!visible || phase != Phase.OFF) return
-        phase = Phase.PREPARING; val id = ++session
-        setStatus("Preparando escucha local", "La primera vez se prepara el modelo incluido en la app.")
-        updateButtons()
-        wake.start(object : WakeDetector.Listener {
-            override fun onListening() { if (id == session && visible) { phase = Phase.WAKE; setStatus("Esperando «JARVIS»", "La activación se procesa en este teléfono. Di JARVIS y espera el saludo."); updateButtons() } }
-            override fun onWake() { if (id == session && visible) { phase = Phase.OFF; connectLive() } }
-            override fun onError(message: String) { if (id == session) stopAll(message) }
-        })
+    override fun onRequestPermissionsResult(requestCode: Int,permissions: Array<out String>,grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode,permissions,grantResults)
+        if(requestCode==7) setStatus(if(grantResults.firstOrNull()==PackageManager.PERMISSION_GRANTED) "Micrófono autorizado" else "Micrófono sin permiso","Pulsa Activar escucha o Conversar ahora para comenzar. Puedes revisar permisos desde Ajustes de Android.")
+        if(requestCode==8) setStatus("Preferencia de notificaciones guardada","Pulsa de nuevo para comenzar. Con notificaciones puedes revisar acciones y detener la escucha al usar otras apps.")
     }
-    private fun connectLive() {
-        if (!visible) return
-        val key = try { settings.readKey() } catch (_: Exception) {
-            stopAll("No se pudo abrir tu clave protegida. Introdúcela nuevamente en Ajustes."); return
-        }
-        if (key.isBlank()) { openSettings(); return }
-        phase = Phase.CONNECTING; val id = ++session
-        setStatus("Conectando con JARVIS", "Preparando la conversación de voz…")
-        updateButtons(); window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        val client = GeminiLiveClient(object : GeminiLiveClient.Listener {
-            private fun ui(action: () -> Unit) { main.post { if (id == session && visible) action() } }
-            override fun onReady() = ui {
-                volumeControlStream = android.media.AudioManager.STREAM_VOICE_CALL
-                main.removeCallbacks(timeout); phase = Phase.LIVE; lastActivityAt = System.currentTimeMillis()
-                setStatus("Conversación activa", "Puedes hablar e intervenir con naturalidad. Pulsa Detener para terminar.")
-                audio = AudioEngine(applicationContext).also { engine -> engine.start(object : AudioEngine.Listener {
-                    override fun onPcm(pcm: ByteArray) { if (id == session) live?.sendAudio(pcm) }
-                    override fun onSpeech() { lastActivityAt = System.currentTimeMillis() }
-                    override fun onLevel(level: Float) = ui { orb.level = level }
-                    override fun onError(message: String) = ui { stopAll(message) }
-                }) }
-                live?.greet(); main.postDelayed(idle, 1000); updateButtons()
-            }
-            override fun onAudio(pcm: ByteArray) { if (id == session) { lastActivityAt = System.currentTimeMillis(); audio?.enqueue(pcm) } }
-            override fun onTranscript(role: String, text: String) = ui { addTranscript(role, text) }
-            override fun onInterrupted() = ui { audio?.interrupt(); flushTurn() }
-            override fun onTurnComplete() = ui { flushTurn() }
-            override fun onError(message: String) = ui { stopAll(message) }
-        })
-        live = client
-        try { client.connect(key); main.postDelayed(timeout, 25_000) } catch (_: Exception) { stopAll("No se pudo iniciar la conexión. Revisa tu configuración.") }
+    private fun stopAll(error: String?=null) {
+        sessionController?.stop(error)
+        setStatus("En pausa",error ?: "El micrófono está apagado.")
     }
-    private fun stopAll(error: String? = null) {
-        ++session; main.removeCallbacks(timeout); main.removeCallbacks(idle)
-        live?.close(); live = null; audio?.close(); audio = null; wake.stop()
-        flushTurn(); phase = Phase.OFF
-        volumeControlStream = android.media.AudioManager.STREAM_MUSIC
-        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        if (::status.isInitialized) {
-            setStatus(if (error == null) "En pausa" else "No se pudo continuar", error ?: "El micrófono está apagado. Actívalo cuando lo necesites.")
-            orb.level = 0f; updateButtons()
-        }
-    }
-    private fun updateButtons() {
-        primary.text = when(phase) { Phase.OFF -> if (settings.wakeEnabled) "Activar escucha" else "Iniciar conversación"; else -> "Detener" }
-        manual.visibility = if (phase == Phase.OFF && settings.wakeEnabled) View.VISIBLE else View.GONE
-        orb.active = phase != Phase.OFF; orb.invalidate()
-    }
-    private fun setStatus(label: String, info: String) { status.text = label; detail.text = info }
-    private fun addTranscript(role: String, segment: String) {
-        if (pending.isEmpty() && bubbles.isEmpty() && transcript.childCount == 1) transcript.removeAllViews()
-        val buffer = pending.getOrPut(role) { StringBuilder() }.append(segment)
-        if (buffer.length > 16000) buffer.delete(0, buffer.length - 16000)
-        val contentText = buffer.toString()
-        val bubble = bubbles.getOrPut(role) {
-            text("", 14f, light).apply {
-                setPadding(0,dp(10),0,dp(12)); transcript.addView(this)
+    private fun renderState(snapshot: SessionController.State?) {
+        if(!::primary.isInitialized) return
+        val active=snapshot?.phase?.let {it!=SessionController.Phase.OFF} ?: false
+        primary.text=if(active) "Detener" else if(settings.wakeEnabled) "Activar escucha" else "Iniciar conversación"
+        manual.visibility=if(!active && settings.wakeEnabled) View.VISIBLE else View.GONE
+        orb.active=active;orb.level=snapshot?.level ?: 0f;orb.invalidate()
+        if(active) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        volumeControlStream=if(snapshot?.phase==SessionController.Phase.LIVE) android.media.AudioManager.STREAM_VOICE_CALL else android.media.AudioManager.STREAM_MUSIC
+        snapshot?.let {
+            setStatus(it.status,it.detail)
+            if(it.chatVersion!=lastChatVersion) {
+                lastChatVersion=it.chatVersion
+                if(it.lines.isNotEmpty()) {
+                    transcript.removeAllViews()
+                    it.lines.forEach { line -> transcript.addView(text((if(line.role=="user") "TÚ\n" else "JARVIS\n")+line.text,14f,light).apply {setPadding(0,dp(8),0,dp(12))}) }
+                    chatScroll.post {chatScroll.fullScroll(View.FOCUS_DOWN)}
+                }
             }
         }
-        bubble.text = (if (role == "user") "TÚ\n" else "JARVIS\n") + contentText
-        chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
-    }
-    private fun flushTurn() {
-        if (!::history.isInitialized) return
-        val iterator = pending.iterator()
-        var failed = false
-        while (iterator.hasNext()) {
-            val entry = iterator.next()
-            try { history.append(entry.key, entry.value.toString()); iterator.remove() } catch (_: Exception) { failed = true }
+        val entry=snapshot?.pending
+        if(dialogId!=entry?.call?.id) {actionDialog?.dismiss();actionDialog=null;dialogId=null}
+        if(visible && entry!=null && dialogId==null) {
+            dialogId=entry.call.id
+            actionDialog=AlertDialog.Builder(this).setTitle(entry.plan.title).setMessage(entry.plan.summary)
+                .setNegativeButton("Cancelar") {_,_->sessionController?.reject(entry.call.id)}
+                .setPositiveButton("Continuar") {_,_->sessionController?.approve(entry.call.id)}
+                .setOnCancelListener {sessionController?.reject(entry.call.id)}.create()
+            actionDialog?.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            actionDialog?.show()
         }
-        if (failed) Toast.makeText(this, "No se pudo guardar el historial. Revisa el espacio disponible.", Toast.LENGTH_LONG).show()
-        bubbles.clear()
     }
+    private fun setStatus(label: String,info: String) {status.text=label;detail.text=info}
     private fun openSettings() {
         stopAll()
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22),dp(8),dp(22),0) }
@@ -235,7 +186,7 @@ class MainActivity : Activity() {
             val notices = assets.open("licenses/NOTICES.txt").bufferedReader().use { it.readText() }
             AlertDialog.Builder(this@MainActivity).setTitle("Licencias").setMessage(notices).setPositiveButton("Cerrar", null).show()
         } })
-        box.addView(text("La escucha funciona con la app abierta. Al salir o bloquear el teléfono se detiene. El historial local no se envía a Gemini.", 12f, muted).apply { setPadding(0,dp(12),0,dp(12)) })
+        box.addView(text("Con control habilitado puedes conversar al usar otras apps. Detener, bloquear la pantalla o cerrar la tarea apagan la escucha. El historial local no se envía a Gemini.", 12f, muted).apply { setPadding(0,dp(12),0,dp(12)) })
         val dialog = AlertDialog.Builder(this).setTitle("Ajustes de JARVIS").setView(box).setNegativeButton("Cancelar", null)
             .setNeutralButton("Eliminar clave", null).setPositiveButton("Guardar", null).create()
         dialog.setOnShowListener {

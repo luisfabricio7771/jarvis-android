@@ -1,14 +1,17 @@
-# Instalar JARVIS en tu Android
+# Instalar y probar JARVIS Android 0.2.0
 
-1. Copia `artifacts/JARVIS-Android-0.1.0.apk` al teléfono.
-2. Abre el archivo desde Archivos y autoriza esa instalación cuando Android lo solicite.
-3. Abre **JARVIS → Ajustes** y añade tu clave Gemini. Guarda.
-4. Pulsa **Activar escucha**, concede permiso de micrófono y pulsa nuevamente si la app lo indica.
-5. Di **JARVIS** y espera «Aquí estoy…». Después haz tu pregunta.
-6. **Detener** apaga la escucha. También se detiene al salir de la app o bloquear la pantalla.
+1. Copia `artifacts/JARVIS-Android-0.2.0.apk` al teléfono y actualiza la app existente. No la desinstales si quieres conservar tus datos.
+2. Abre **Control del teléfono → Permitir acciones por voz**.
+3. Para tocar dentro de apps, activa **Permitir control de pantalla**, pulsa **Elegir apps autorizadas** y selecciona inicialmente una app sencilla, por ejemplo YouTube.
+4. Pulsa **Activar servicio en Android** y habilita **Control de pantalla de JARVIS**. Si Android muestra restricciones, revísalas manualmente en sus ajustes. La app no puede autorizarse sola.
+5. Activa **Compartir etiquetas visibles con Gemini** después de leer la explicación. Puede compartir textos visibles de controles, incluidos nombres de personas u otros datos de las apps elegidas. No envía capturas, contraseñas ni el texto actual de los campos editables.
+6. Mantén **Revisar cada toque y desplazamiento** activo para comenzar. Puedes desactivarlo para navegación común; la escritura sigue mostrando revisión y los controles finales definidos siguen siendo manuales.
+7. Regresa a JARVIS. Configura la clave en Ajustes si hace falta, inicia la escucha y concede micrófono/notificaciones. Si se solicita volver a pulsar, pulsa de nuevo para iniciar.
 
-Necesita Android 10 o superior e Internet para conversar. La primera preparación local puede tardar unos segundos. Los modelos ya vienen en el APK. Si falla la activación, prueba **Conversar ahora** para distinguir el reconocimiento de la conexión Gemini.
+Prueba «Abre YouTube», «Toca Buscar», «Escribe música relajante» y «Baja un poco». La app de destino debe exponer controles accesibles; si no, tendrás que completar ese paso manualmente. No se promete automatización de todas las interfaces.
 
-No pegues tu clave en GitHub ni en este chat. La clave se configura dentro del teléfono. La cuenta debe tener acceso a Gemini 3.8 Live y cuota; una respuesta de cuota o acceso rechazado no es un error de instalación.
+También puedes probar ajustes, reloj y apertura de apps desde Control del teléfono sin Gemini. Los borradores de llamadas y mensajes no se envían automáticamente.
 
-El historial vive en el teléfono y no se comparte con JARVIS PC. Es una primera versión de prueba: necesitamos comprobar voz, micrófono y salida de audio en tu teléfono.
+**Detener** en la app o notificación apaga la escucha. Bloquear la pantalla o cerrar la tarea también la detienen. Con acciones por voz desactivadas, salir de JARVIS conserva la pausa de la versión anterior.
+
+La clave se introduce en el teléfono, no en GitHub ni en este chat. Una respuesta de acceso o cuota de Gemini no es un error de instalación. Esta versión sigue firmada para pruebas locales, no publicada en Play Store.

@@ -1,5 +1,7 @@
 package dev.jarvis.android.live
 
+import dev.jarvis.android.actions.ToolCall
+import java.util.concurrent.ConcurrentHashMap
 import okhttp3.*
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okio.ByteString
@@ -12,7 +14,8 @@ class GeminiLiveClient(
     private val listener: Listener,
     private val client: OkHttpClient = OkHttpClient.Builder().readTimeout(0, TimeUnit.MILLISECONDS)
         .connectTimeout(20, TimeUnit.SECONDS).pingInterval(20, TimeUnit.SECONDS).build(),
-    private val endpoint: HttpUrl = LiveProtocol.ENDPOINT.toHttpUrl()
+    private val endpoint: HttpUrl = LiveProtocol.ENDPOINT.toHttpUrl(),
+    private val toolsEnabled: Boolean = false
 ) {
     interface Listener {
         fun onReady()
@@ -20,11 +23,15 @@ class GeminiLiveClient(
         fun onTranscript(role: String, text: String)
         fun onInterrupted()
         fun onTurnComplete()
+        fun onToolCall(call: ToolCall) {}
+        fun onToolCancelled(id: String) {}
         fun onError(message: String)
     }
     private val ready = AtomicBoolean(false)
     private val closed = AtomicBoolean(false)
     private var socket: WebSocket? = null
+    private val pendingTools = ConcurrentHashMap<String, ToolCall>()
+    private val seenTools = java.util.Collections.synchronizedSet(linkedSetOf<String>())
     fun connect(apiKey: String) {
         check(socket == null) { "Create a new client for each connection" }
         require(apiKey.isNotBlank())
@@ -33,7 +40,7 @@ class GeminiLiveClient(
         socket = client.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (closed.get()) { webSocket.close(1000, "Stopped"); return }
-                webSocket.send(LiveProtocol.setup())
+                webSocket.send(LiveProtocol.setup(toolsEnabled))
             }
             override fun onMessage(webSocket: WebSocket, text: String) = receive(text)
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) = receive(bytes.utf8())
@@ -64,6 +71,30 @@ class GeminiLiveClient(
             }
             if (json.has("setupComplete") && ready.compareAndSet(false, true)) listener.onReady()
             if (json.has("goAway")) { fail("Gemini está por cerrar la sesión. Vuelve a conectar para continuar."); return }
+            if (ready.get()) {
+                json.optJSONObject("toolCallCancellation")?.optJSONArray("ids")?.let { ids ->
+                    for(i in 0 until ids.length()) {
+                        val id=ids.optString(i)
+                        if(pendingTools.remove(id)!=null) listener.onToolCancelled(id)
+                    }
+                }
+                json.optJSONObject("toolCall")?.optJSONArray("functionCalls")?.let { calls ->
+                    if(calls.length()>8) { fail("Gemini solicitó demasiadas acciones juntas."); return }
+                    for(i in 0 until calls.length()) {
+                        val value=calls.getJSONObject(i)
+                        val id=value.getString("id");val name=value.getString("name")
+                        require(id.isNotBlank() && id.length<=256 && name.length in 1..80)
+                        val args=if(value.has("args")) value.getJSONObject("args") else JSONObject()
+                        require(args.toString().length<=16000)
+                        if(!seenTools.add(id)) continue
+                        if(seenTools.size>512) { fail("La sesión alcanzó el límite de acciones. Vuelve a conectar."); return }
+                        val call=ToolCall(id,name,args)
+                        pendingTools[id]=call
+                        if(!toolsEnabled) respondTool(call,JSONObject().put("status","disabled").put("message","El control del teléfono está desactivado."))
+                        else listener.onToolCall(call)
+                    }
+                }
+            }
             val content = json.optJSONObject("serverContent") ?: return
             if (!ready.get()) return
             if (content.optBoolean("interrupted")) listener.onInterrupted()
@@ -80,12 +111,12 @@ class GeminiLiveClient(
                     ?.let { listener.onTranscript(role, it) }
             }
             if (content.optBoolean("turnComplete")) listener.onTurnComplete()
-            if (json.has("goAway")) fail("Gemini está por cerrar la sesión. Vuelve a conectar para continuar.")
+
         } catch (_: Exception) { fail("Gemini envió una respuesta de audio que no se pudo procesar.") }
     }
     private fun fail(message: String) {
         if (closed.compareAndSet(false, true)) {
-            ready.set(false); socket?.cancel(); listener.onError(message)
+            ready.set(false); pendingTools.clear(); socket?.cancel(); listener.onError(message)
         }
     }
     fun sendAudio(pcm: ByteArray): Boolean {
@@ -94,12 +125,21 @@ class GeminiLiveClient(
         if (ws.queueSize() > 512_000) { fail("La conexión es demasiado lenta para audio en vivo. Vuelve a conectar."); return false }
         return ws.send(LiveProtocol.audio(pcm))
     }
+    fun isToolPending(id: String): Boolean = ready.get() && !closed.get() && pendingTools.containsKey(id)
+    fun respondTool(call: ToolCall, response: JSONObject): Boolean {
+        if(!ready.get() || closed.get() || pendingTools[call.id]?.name!=call.name) return false
+        if(!pendingTools.remove(call.id,call)) return false
+        val value=JSONObject().put("toolResponse",JSONObject().put("functionResponses",org.json.JSONArray().put(
+            JSONObject().put("id",call.id).put("name",call.name).put("response",response))))
+        return socket?.send(value.toString()) ?: false
+    }
     fun greet() { if (ready.get() && !closed.get()) socket?.send(LiveProtocol.greeting()) }
     fun close() {
         if (closed.compareAndSet(false, true)) {
             if (ready.getAndSet(false)) socket?.send(LiveProtocol.endAudio())
             socket?.close(1000, "Stopped")
         }
+        pendingTools.clear()
         client.dispatcher.executorService.shutdown()
         client.connectionPool.evictAll()
     }

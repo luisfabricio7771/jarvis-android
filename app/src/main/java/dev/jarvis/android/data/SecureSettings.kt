@@ -18,6 +18,21 @@ class SecureSettings(context: Context) {
     var wakeEnabled: Boolean
         get() = prefs.getBoolean("wake", true)
         set(value) { check(prefs.edit().putBoolean("wake", value).commit()) }
+    var phoneControlEnabled: Boolean
+        get() = prefs.getBoolean("phone_control", false)
+        set(value) { check(prefs.edit().putBoolean("phone_control", value).commit()) }
+    var screenControlEnabled: Boolean
+        get() = prefs.getBoolean("screen_control", false)
+        set(value) { check(prefs.edit().putBoolean("screen_control", value).commit()) }
+    var shareScreenLabels: Boolean
+        get() = prefs.getBoolean("screen_share_labels", false)
+        set(value) { check(prefs.edit().putBoolean("screen_share_labels", value).commit()) }
+    var confirmScreenTouches: Boolean
+        get() = prefs.getBoolean("screen_confirm_touches", true)
+        set(value) { check(prefs.edit().putBoolean("screen_confirm_touches", value).commit()) }
+    var screenApps: Set<String>
+        get() = prefs.getStringSet("screen_apps", emptySet())?.toSet() ?: emptySet()
+        set(value) { check(prefs.edit().putStringSet("screen_apps", value.toSet()).commit()) }
     fun hasKey(): Boolean = prefs.contains("api_key_ciphertext")
     private fun secret(create: Boolean): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }

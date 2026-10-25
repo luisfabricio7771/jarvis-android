@@ -15,6 +15,16 @@ class LiveProtocolTest {
         }
         assertFalse(json.has("tools"))
     }
+    @Test fun toolsAreExplicitlyEnabledAndUseBlockingResults() {
+        val declarations=JSONObject(LiveProtocol.setup(true)).getJSONObject("setup").getJSONArray("tools").getJSONObject(0).getJSONArray("functionDeclarations")
+        assertEquals(16,declarations.length())
+        for(i in 0 until declarations.length()) {
+            val tool=declarations.getJSONObject(i)
+            assertEquals("BLOCKING",tool.getString("behavior"))
+            val parameters=tool.getJSONObject("parameters")
+            for(j in 0 until parameters.getJSONArray("required").length()) assertTrue(parameters.getJSONObject("properties").has(parameters.getJSONArray("required").getString(j)))
+        }
+    }
     @Test fun conservativeSpeechDetectionAndNaturalTurns() {
         val json = JSONObject(LiveProtocol.setup()).getJSONObject("setup").getJSONObject("realtimeInputConfig")
         assertEquals("START_OF_ACTIVITY_INTERRUPTS",json.getString("activityHandling"))

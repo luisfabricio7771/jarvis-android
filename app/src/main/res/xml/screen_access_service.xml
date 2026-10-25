@@ -1,0 +1,11 @@
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools" tools:ignore="UnusedAttribute"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeViewScrolled|typeViewClicked|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="true"
+    android:canPerformGestures="false"
+    android:notificationTimeout="150"
+    android:isAccessibilityTool="false"
+    android:description="@string/screen_access_description"
+    android:settingsActivity="dev.jarvis.android.actions.ControlActivity" />

@@ -10,6 +10,7 @@ import java.util.concurrent.*
 class GeminiLiveClientTest {
     private class Events : GeminiLiveClient.Listener {
         val ready=CountDownLatch(1); val turn=CountDownLatch(1); val stopped=CountDownLatch(1)
+        val calls=LinkedBlockingQueue<dev.jarvis.android.actions.ToolCall>();val cancelled=LinkedBlockingQueue<String>()
         val errors=LinkedBlockingQueue<String>(); val audios=LinkedBlockingQueue<ByteArray>(); val texts=LinkedBlockingQueue<String>()
         override fun onReady() { ready.countDown() }
         override fun onAudio(pcm: ByteArray) { audios.offer(pcm) }
@@ -17,10 +18,13 @@ class GeminiLiveClientTest {
         override fun onInterrupted() { stopped.countDown() }
         override fun onTurnComplete() { turn.countDown() }
         override fun onError(message: String) { errors.offer(message) }
+        override fun onToolCall(call: dev.jarvis.android.actions.ToolCall) {calls.offer(call)}
+        override fun onToolCancelled(id: String) {cancelled.offer(id)}
     }
     @Test fun audioWaitsForSetupAndInterruptionReachesPlayer() {
         val server=MockWebServer();val incoming=LinkedBlockingQueue<String>();val connected=LinkedBlockingQueue<WebSocket>()
         server.enqueue(MockResponse().withWebSocketUpgrade(object: WebSocketListener() {
+            override fun onClosing(webSocket: WebSocket,code: Int,reason: String) {webSocket.close(code,reason)}
             override fun onOpen(webSocket: WebSocket,response: Response) { connected.offer(webSocket) }
             override fun onMessage(webSocket: WebSocket,text: String) { incoming.offer(text) }
         }));server.start()
@@ -41,6 +45,7 @@ class GeminiLiveClientTest {
     }
     @Test fun remoteErrorsNeverExposeProviderPayloadOrApiKey() {
         val server=MockWebServer();server.enqueue(MockResponse().withWebSocketUpgrade(object: WebSocketListener() {
+            override fun onClosing(webSocket: WebSocket,code: Int,reason: String) {webSocket.close(code,reason)}
             override fun onMessage(webSocket: WebSocket,text: String) { webSocket.send("{\"error\":{\"code\":429,\"message\":\"leaked secret test-key-never-real\"}}") }
         }));server.start()
         val events=Events();val client=GeminiLiveClient(events,endpoint=server.url("/live"))
@@ -49,6 +54,7 @@ class GeminiLiveClientTest {
     }
     @Test fun malformedMessagesFailClosed() {
         val server=MockWebServer();server.enqueue(MockResponse().withWebSocketUpgrade(object: WebSocketListener() {
+            override fun onClosing(webSocket: WebSocket,code: Int,reason: String) {webSocket.close(code,reason)}
             override fun onMessage(webSocket: WebSocket,text: String) { webSocket.send("not json") }
         }));server.start();val events=Events();val client=GeminiLiveClient(events,endpoint=server.url("/live"))
         try {client.connect("test-key-never-real");assertNotNull(events.errors.poll(5,TimeUnit.SECONDS));assertFalse(client.sendAudio(ByteArray(2))) }
@@ -56,8 +62,47 @@ class GeminiLiveClientTest {
     }
     @Test fun goAwayWithoutServerContentIsHandled() {
         val server=MockWebServer();server.enqueue(MockResponse().withWebSocketUpgrade(object: WebSocketListener() {
+            override fun onClosing(webSocket: WebSocket,code: Int,reason: String) {webSocket.close(code,reason)}
             override fun onMessage(webSocket: WebSocket,text: String) { webSocket.send("{\"goAway\":{\"timeLeft\":\"10s\"}}") }
         }));server.start();val events=Events();val client=GeminiLiveClient(events,endpoint=server.url("/live"))
         try { client.connect("test-key-never-real");assertNotNull(events.errors.poll(5,TimeUnit.SECONDS)) } finally {client.close();server.shutdown()}
     }
+
+    @Test fun toolResultsKeepTheirIdsAndCancellationPreventsExecution() {
+        val server=MockWebServer();val incoming=LinkedBlockingQueue<String>();val connected=LinkedBlockingQueue<WebSocket>()
+        server.enqueue(MockResponse().withWebSocketUpgrade(object: WebSocketListener() {
+            override fun onClosing(webSocket: WebSocket,code: Int,reason: String) {webSocket.close(code,reason)}
+            override fun onOpen(webSocket: WebSocket,response: Response) {connected.offer(webSocket)}
+            override fun onMessage(webSocket: WebSocket,text: String) {incoming.offer(text)}
+        }));server.start();val events=Events();val client=GeminiLiveClient(events,endpoint=server.url("/live"),toolsEnabled=true)
+        try {
+            client.connect("test-key-never-real");val ws=connected.poll(5,TimeUnit.SECONDS)!!
+            val setup=JSONObject(incoming.poll(5,TimeUnit.SECONDS)!!).getJSONObject("setup");assertTrue(setup.has("tools"))
+            ws.send("{\"setupComplete\":{}}");assertTrue(events.ready.await(5,TimeUnit.SECONDS))
+            val request="{\"toolCall\":{\"functionCalls\":[{\"id\":\"a\",\"name\":\"phone_status\",\"args\":{}},{\"id\":\"b\",\"name\":\"open_app\",\"args\":{\"app\":\"YouTube\"}}]}}"
+            ws.send(request);val a=events.calls.poll(5,TimeUnit.SECONDS)!!;val b=events.calls.poll(5,TimeUnit.SECONDS)!!
+            assertEquals("a",a.id);assertEquals("b",b.id);assertTrue(client.respondTool(a,JSONObject().put("status","ok")))
+            val result=JSONObject(incoming.poll(5,TimeUnit.SECONDS)!!).getJSONObject("toolResponse").getJSONArray("functionResponses").getJSONObject(0)
+            assertEquals("a",result.getString("id"));assertEquals("phone_status",result.getString("name"));assertFalse(client.respondTool(a,JSONObject()))
+            ws.send("{\"toolCallCancellation\":{\"ids\":[\"b\"]}}")
+            assertEquals("b",events.cancelled.poll(5,TimeUnit.SECONDS));assertFalse(client.isToolPending("b"));assertFalse(client.respondTool(b,JSONObject()))
+            ws.send(request);assertNull(events.calls.poll(200,TimeUnit.MILLISECONDS))
+        } finally {client.close();server.shutdown()}
+    }
+    @Test fun disabledToolsRejectUnexpectedRemoteCalls() {
+        val server=MockWebServer();val responses=LinkedBlockingQueue<String>()
+        server.enqueue(MockResponse().withWebSocketUpgrade(object: WebSocketListener() {
+            override fun onClosing(webSocket: WebSocket,code: Int,reason: String) {webSocket.close(code,reason)}
+            override fun onMessage(webSocket: WebSocket,text: String) {
+                if(JSONObject(text).has("setup")) {webSocket.send("{\"setupComplete\":{}}");webSocket.send("{\"toolCall\":{\"functionCalls\":[{\"id\":\"x\",\"name\":\"open_app\",\"args\":{\"app\":\"YouTube\"}}]}}")}
+                else responses.offer(text)
+            }
+        }));server.start();val events=Events();val client=GeminiLiveClient(events,endpoint=server.url("/live"))
+        try {
+            client.connect("test-key-never-real")
+            val value=JSONObject(responses.poll(5,TimeUnit.SECONDS)!!).getJSONObject("toolResponse").getJSONArray("functionResponses").getJSONObject(0)
+            assertEquals("disabled",value.getJSONObject("response").getString("status"));assertTrue(events.calls.isEmpty())
+        } finally {client.close();server.shutdown()}
+    }
+
 }
