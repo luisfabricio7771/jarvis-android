@@ -1,0 +1,18 @@
+{
+  "voice": {
+    "maxProbability": 0.9999675750732422,
+    "speechFrames": 19
+  },
+  "silence": {
+    "maxProbability": 0.01201203465461731,
+    "speechFrames": 0
+  },
+  "white_noise": {
+    "maxProbability": 0.17216861248016357,
+    "speechFrames": 0
+  },
+  "clicks": {
+    "maxProbability": 0.016830474138259888,
+    "speechFrames": 0
+  }
+}

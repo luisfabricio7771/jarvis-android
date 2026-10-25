@@ -1,0 +1,58 @@
+{
+  "apk": "JARVIS-Android-0.1.0.apk",
+  "bytes": 129753378,
+  "sha256": "3666da812863c47878bfdd748c94f8d45a017ff6b675a76d214219140ae27be7",
+  "tests": [
+    {
+      "name": "dev.jarvis.android.GeminiLiveClientTest",
+      "tests": "4",
+      "errors": "0",
+      "failures": "0"
+    },
+    {
+      "name": "dev.jarvis.android.LiveProtocolTest",
+      "tests": "5",
+      "errors": "0",
+      "failures": "0"
+    },
+    {
+      "name": "dev.jarvis.android.LocalAppTest",
+      "tests": "8",
+      "errors": "0",
+      "failures": "0"
+    },
+    {
+      "name": "dev.jarvis.android.SpeechGateTest",
+      "tests": "6",
+      "errors": "0",
+      "failures": "0"
+    },
+    {
+      "name": "dev.jarvis.android.WakePhraseTest",
+      "tests": "2",
+      "errors": "0",
+      "failures": "0"
+    }
+  ],
+  "arm64LoadAlignments": {
+    "lib/arm64-v8a/libjnidispatch.so": [
+      16384,
+      16384
+    ],
+    "lib/arm64-v8a/libonnxruntime.so": [
+      16384,
+      16384,
+      16384
+    ],
+    "lib/arm64-v8a/libonnxruntime4j_jni.so": [
+      16384,
+      16384
+    ],
+    "lib/arm64-v8a/libvosk.so": [
+      16384,
+      16384,
+      16384,
+      16384
+    ]
+  }
+}

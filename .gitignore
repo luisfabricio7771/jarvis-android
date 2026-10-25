@@ -18,3 +18,9 @@ captures/
 .local-backups/
 .DS_Store
 Thumbs.db
+.tools/
+.local-gradle/
+artifacts/
+app/src/main/assets/wake-model.zip
+app/src/main/assets/silero_vad.onnx
+*.part
